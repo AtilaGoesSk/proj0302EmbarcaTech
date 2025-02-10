@@ -34,14 +34,15 @@ project(proj0302EmbarcaTech C CXX ASM)
 pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
+add_executable(proj0302EmbarcaTech proj0302EmbarcaTech.c)
 
-add_executable(proj0302EmbarcaTech proj0302EmbarcaTech.c )
-
+# Set program name and version
 pico_set_program_name(proj0302EmbarcaTech "proj0302EmbarcaTech")
 pico_set_program_version(proj0302EmbarcaTech "0.1")
 
-# Generate PIO header
-pico_generate_pio_header(proj0302EmbarcaTech ${CMAKE_CURRENT_LIST_DIR}/blink.pio)
+# Generate PIO header for each .pio file (ws2812b and ssd1306)
+pico_generate_pio_header(proj0302EmbarcaTech ${CMAKE_CURRENT_LIST_DIR}/ws2812b.pio)
+pico_generate_pio_header(proj0302EmbarcaTech ${CMAKE_CURRENT_LIST_DIR}/ssd1306.pio)
 
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(proj0302EmbarcaTech 1)
@@ -49,19 +50,24 @@ pico_enable_stdio_usb(proj0302EmbarcaTech 0)
 
 # Add the standard library to the build
 target_link_libraries(proj0302EmbarcaTech
-        pico_stdlib)
+        pico_stdlib
+        hardware_i2c
+        hardware_pio
+)
+
+# Adicionar o diretório contendo o arquivo de cabeçalho
+include_directories(K:/PROG/ProjectsUnity/proj0302EmbarcaTech)
+include_directories(K:/PROG/ProjectsUnity/proj0302EmbarcaTech/build/pico-sdk/src/sd1306Pasta/Adafruit_SSD1306-master)
+include_directories(K:/PROG/ProjectsUnity/proj0302EmbarcaTech/libs/Adafruit_GFX)
+include_directories(K:\PROG\ProjectsUnity\proj0302EmbarcaTech\build\pico-sdk\src\Adafruit-GFX-Library-master)
+
+
+
 
 # Add the standard include files to the build
 target_include_directories(proj0302EmbarcaTech PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
 )
 
-# Add any user requested libraries
-target_link_libraries(proj0302EmbarcaTech 
-        hardware_i2c
-        hardware_pio
-        
-        )
-
+# Add extra outputs (UF2, BIN, etc)
 pico_add_extra_outputs(proj0302EmbarcaTech)
-

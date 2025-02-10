@@ -1,0 +1,43 @@
+.program ws2812b
+.wrap_target
+
+    ; Início do ciclo de transmissão de 1 byte (8 bits)
+    pull noblock         ; Puxa o próximo valor para o PIO
+    set pindirs, 1       ; Configura o pino como saída
+    set x, 8             ; Configura o contador de bits
+
+send_bit:
+    ; Envia um bit de 8 bits para o WS2812
+    nop                   ; Espera a transição do clock
+    mov isr, x            ; Obtém o valor do bit (0 ou 1)
+    jmp pin, send_1_bit   ; Se o valor de isr for 1, pula para o código para enviar 1
+
+send_0_bit:
+    ; Envia o valor 0
+    set pins, 0           ; Coloca 0 no pino
+    nop
+    nop
+    nop
+    nop
+    jmp delay             ; Pulando para o tempo de espera
+
+send_1_bit:
+    ; Envia o valor 1
+    set pins, 1           ; Coloca 1 no pino
+    nop
+    nop
+    nop
+    jmp delay             ; Pulando para o tempo de espera
+
+delay:
+    ; Delay para o WS2812 para registrar o bit
+    set x, 4
+    jmp delay_loop
+delay_loop:
+    nop
+    nop
+    nop
+    nop
+    jmp x--, delay_loop
+
+.wrap

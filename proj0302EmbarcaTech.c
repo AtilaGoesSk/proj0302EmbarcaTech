@@ -1,83 +1,170 @@
+// Inclusão de bibliotecas
 #include <stdio.h>
+#include <stdlib.h>
 #include "pico/stdlib.h"
 #include "hardware/i2c.h"
 #include "hardware/pio.h"
-#include "hardware/uart.h"
+#include "hardware/clocks.h"
+#include "ws2812b.pio.h"
+#include "Adafruit_SSD1306.h"
+#include "Adafruit_GFX.h"
 
-// I2C defines
-// This example will use I2C0 on GPIO8 (SDA) and GPIO9 (SCL) running at 400KHz.
-// Pins can be changed, see the GPIO function select table in the datasheet for information on GPIO assignments
-#define I2C_PORT i2c0
-#define I2C_SDA 8
-#define I2C_SCL 9
 
-#include "blink.pio.h"
 
-void blink_pin_forever(PIO pio, uint sm, uint offset, uint pin, uint freq) {
-    blink_program_init(pio, sm, offset, pin);
-    pio_sm_set_enabled(pio, sm, true);
+// Definições de hardware
+#define I2C_PORT i2c1
+#define I2C_SDA 14
+#define I2C_SCL 15
+#define endereco 0x3C
 
-    printf("Blinking pin %d at %d Hz\n", pin, freq);
+#define LEDS_COUNT 25
+#define LEDS_PIN 7
+#define BRIGHTNESS 0.2
 
-    // PIO counter program takes 3 more cycles in total than we pass as
-    // input (wait for n + 1; mov; jmp)
-    pio->txf[sm] = (125000000 / (2 * freq)) - 3;
+// Definições de botões e LEDs
+#define RED_LED 13
+#define GREEN_LED 11
+#define BLUE_LED 12
+#define BUTTON_A 5
+#define BUTTON_B 6
+
+// Definição da estrutura para os LEDs (ordem GRB)
+typedef struct {
+    uint8_t g, r, b;
+} pixel_t;
+
+pixel_t leds[LEDS_COUNT]; // Matriz de LEDs
+
+// Buffer para armazenar a entrada do usuário
+char input_buffer[32];
+int input_index = 0;
+
+// Variáveis globais para PIO e state machine
+static PIO np_pio;
+static uint sm;
+ssd1306_t ssd; // Instância do display
+bool cor = true; // Cor de fundo do display
+
+// Variáveis globais para controle dos botões
+volatile uint32_t tempo_anterior = 0;
+
+// Inicializa a máquina de estado PIO
+void npInit(uint pin) {
+    uint offset = pio_add_program(pio0, &ws2812b_program);
+    np_pio = pio0;
+
+    sm = pio_claim_unused_sm(np_pio, true);
+    ws2812b_program_init(np_pio, sm, offset, pin, 800000.f);
+
+    pio_sm_set_enabled(np_pio, sm, true);
+
+    // Desliga todos os LEDs ao iniciar
+    for (uint i = 0; i < LEDS_COUNT; ++i) {
+        leds[i].r = 0;
+        leds[i].g = 0;
+        leds[i].b = 0;
+    }
 }
 
-// UART defines
-// By default the stdout UART is `uart0`, so we will use the second one
-#define UART_ID uart1
-#define BAUD_RATE 115200
+// Função para enviar dados para os LEDs
+void send_to_leds() {
+    for (uint i = 0; i < LEDS_COUNT; ++i) {
+        uint32_t pixel_color = ((uint32_t)leds[i].g << 16) | ((uint32_t)leds[i].r << 8) | ((uint32_t)leds[i].b);
+        pio_sm_put_blocking(np_pio, sm, pixel_color);
+    }
+}
 
-// Use pins 4 and 5 for UART1
-// Pins can be changed, see the GPIO function select table in the datasheet for information on GPIO assignments
-#define UART_TX_PIN 4
-#define UART_RX_PIN 5
+// Converte índices da matriz 5x5 para LEDs WS2812B (invertendo verticalmente)
+int getIndex(int x, int y) {
+    if (y % 2 == 0) {
+        return (4 - y) * 5 + (4 - x);  // Espelhamos a linha par
+    } else {
+        return (4 - y) * 5 + x;  // Mantemos a linha ímpar normal
+    }
+}
 
 
+// Exibe um número na matriz de LEDs
+void display_number(uint8_t number) {
+    // Matriz de números (0-9)
+    const int numbers_animation[11][5][5][3] = {
+        // 0
+        {
+            {{255, 0, 0}, {255, 0, 0}, {255, 0, 0}, {255, 0, 0}, {255, 0, 0}},     
+            {{255, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {255, 0, 0}},
+            {{255, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {255, 0, 0}},
+            {{255, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {255, 0, 0}},
+            {{255, 0, 0}, {255, 0, 0}, {255, 0, 0}, {255, 0, 0}, {255, 0, 0}}      
+        },
+        
+        {
+            {{0, 0, 0}, {0, 0, 0}, {230, 42, 0}, {0, 0, 0}, {0, 0, 0}},
+            {{0, 0, 0}, {230, 42, 0}, {230, 42, 0}, {0, 0, 0}, {0, 0, 0}},
+            {{0, 0, 0}, {0, 0, 0}, {230, 42, 0}, {0, 0, 0}, {0, 0, 0}},
+            {{0, 0, 0}, {0, 0, 0}, {230, 42, 0}, {0, 0, 0}, {0, 0, 0}},
+            {{0, 0, 0}, {230, 42, 0}, {230, 42, 0}, {230, 42, 0}, {0, 0, 0}}       
+        },
+        
+        {
+            {{204, 85, 0}, {204, 85, 0}, {204, 85, 0}, {204, 85, 0}, {204, 85, 0}},
+            {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {204, 85, 0}},
+            {{204, 85, 0}, {204, 85, 0}, {204, 85, 0}, {204, 85, 0}, {204, 85, 0}},
+            {{204, 85, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+            {{204, 85, 0}, {204, 85, 0}, {204, 85, 0}, {204, 85, 0}, {204, 85, 0}}
+        },
+        
+        {
+            {{255, 128, 0}, {255, 128, 0}, {255, 128, 0}, {255, 128, 0}, {255, 128, 0}},
+            {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {255, 128, 0}},
+            {{0, 0, 0}, {255, 128, 0}, {255, 128, 0}, {255, 128, 0}, {255, 128, 0}},
+            {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {255, 128, 0}},
+            {{255, 128, 0}, {255, 128, 0}, {255, 128, 0}, {255, 128, 0}, {255, 128, 0}}
+        },
+        
+        {
+            {{255, 170, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {255, 170, 0}},
+            {{255, 170, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {255, 170, 0}},
+            {{255, 170, 0}, {255, 170, 0}, {255, 170, 0}, {255, 170, 0}, {255, 170, 0}},
+            {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {255, 170, 0}},
+            {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {255, 170, 0}}
+        },
 
-int main()
-{
+        // ... continuar com a definição dos outros números até o 9 ...
+    };
+
+    // Desenho do número selecionado no display de LEDs
+    for (int y = 0; y < 5; y++) {
+        for (int x = 0; x < 5; x++) {
+            int idx = getIndex(x, y);
+            leds[idx].r = numbers_animation[number][y][x][0];
+            leds[idx].g = numbers_animation[number][y][x][1];
+            leds[idx].b = numbers_animation[number][y][x][2];
+        }
+    }
+
+    send_to_leds();
+}
+
+int main() {
+    // Inicializações
     stdio_init_all();
+    npInit(LEDS_PIN);
 
-    // I2C Initialisation. Using it at 400Khz.
-    i2c_init(I2C_PORT, 400*1000);
-    
+    // Configuração do display I2C
+    i2c_init(I2C_PORT, 400 * 1000);
     gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
     gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
     gpio_pull_up(I2C_SDA);
     gpio_pull_up(I2C_SCL);
-    // For more examples of I2C use see https://github.com/raspberrypi/pico-examples/tree/master/i2c
+    ssd1306_init(&ssd, I2C_PORT, endereco);
+    ssd1306_clear(&ssd);
 
-    // PIO Blinking example
-    PIO pio = pio0;
-    uint offset = pio_add_program(pio, &blink_program);
-    printf("Loaded program at %d\n", offset);
+    // Exemplo de exibição do número 5 na matriz
+    display_number(5);
     
-    #ifdef PICO_DEFAULT_LED_PIN
-    blink_pin_forever(pio, 0, offset, PICO_DEFAULT_LED_PIN, 3);
-    #else
-    blink_pin_forever(pio, 0, offset, 6, 3);
-    #endif
-    // For more pio examples see https://github.com/raspberrypi/pico-examples/tree/master/pio
-
-    // Set up our UART
-    uart_init(UART_ID, BAUD_RATE);
-    // Set the TX and RX pins by using the function select on the GPIO
-    // Set datasheet for more information on function select
-    gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
-    gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
-    
-    // Use some the various UART functions to send out data
-    // In a default system, printf will also output via the default UART
-    
-    // Send out a string, with CR/LF conversions
-    uart_puts(UART_ID, " Hello, UART!\n");
-    
-    // For more examples of UART use see https://github.com/raspberrypi/pico-examples/tree/master/uart
-
     while (true) {
-        printf("Hello, world!\n");
-        sleep_ms(1000);
+        tight_loop_contents();
     }
+
+    return 0;
 }

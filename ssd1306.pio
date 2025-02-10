@@ -1,0 +1,37 @@
+.program ssd1306_i2c
+.wrap_target
+
+; Espera para começar a transmissão
+    pull noblock
+    set pindirs, 1        ; Configura o pino como saída
+    set x, 8              ; Configura o contador de bits para 8 bits
+    jmp start_write_data  ; Pula para iniciar a escrita de dados
+
+start_write_data:
+    ; Espera que os dados sejam lidos
+    pull block            ; Puxa os dados para o PIO
+    mov isr, x            ; Pega os 8 bits de dados
+    set x, 8              ; Reseta o contador de bits
+    jmp write_bit         ; Vai para o envio de cada bit
+
+write_bit:
+    ; Envia um bit de cada vez
+    nop                    ; Espera pela transição do relógio
+    jmp pin, send_bit_1    ; Se isr == 1, envia 1
+    jmp send_bit_0         ; Caso contrário, envia 0
+
+send_bit_1:
+    set pins, 1            ; Envia o bit 1
+    jmp write_delay
+
+send_bit_0:
+    set pins, 0            ; Envia o bit 0
+
+write_delay:
+    nop
+    nop                    ; Delay para garantir que o tempo de transmissão esteja correto
+    nop
+    nop
+    jmp x--, write_bit     ; Decrementa o contador e continua o loop
+
+.wrap
