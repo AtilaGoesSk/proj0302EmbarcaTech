@@ -34,7 +34,12 @@ project(proj0302EmbarcaTech C CXX ASM)
 pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
-add_executable(proj0302EmbarcaTech proj0302EmbarcaTech.c)
+add_executable(proj0302EmbarcaTech
+    proj0302EmbarcaTech.c
+    src/ws2812b.pio.c
+    src/ssd1306.c
+    src/font.c
+)
 
 # Set program name and version
 pico_set_program_name(proj0302EmbarcaTech "proj0302EmbarcaTech")
@@ -57,12 +62,8 @@ target_link_libraries(proj0302EmbarcaTech
 
 # Adicionar o diretório contendo o arquivo de cabeçalho
 include_directories(K:/PROG/ProjectsUnity/proj0302EmbarcaTech)
-include_directories(K:/PROG/ProjectsUnity/proj0302EmbarcaTech/build/pico-sdk/src/sd1306Pasta/Adafruit_SSD1306-master)
-include_directories(K:/PROG/ProjectsUnity/proj0302EmbarcaTech/libs/Adafruit_GFX)
-include_directories(K:\PROG\ProjectsUnity\proj0302EmbarcaTech\build\pico-sdk\src\Adafruit-GFX-Library-master)
-
-
-
+include_directories(K:/PROG/ProjectsUnity/proj0302EmbarcaTech/inc)
+target_link_libraries(proj0302EmbarcaTech PUBLIC ws2812b ssd1306)
 
 # Add the standard include files to the build
 target_include_directories(proj0302EmbarcaTech PRIVATE

@@ -5,17 +5,17 @@
 #include "hardware/i2c.h"
 #include "hardware/pio.h"
 #include "hardware/clocks.h"
+#include "hardware/gpio.h"
 #include "ws2812b.pio.h"
-#include "Adafruit_SSD1306.h"
-#include "Adafruit_GFX.h"
-
-
+#include "inc/ssd1306.h"
+#include "inc/font.h"
 
 // Definições de hardware
 #define I2C_PORT i2c1
 #define I2C_SDA 14
 #define I2C_SCL 15
-#define endereco 0x3C
+#define ENDERECO 0x3C
+#define RESET_PIN 16
 
 #define LEDS_COUNT 25
 #define LEDS_PIN 7
@@ -83,11 +83,10 @@ int getIndex(int x, int y) {
     }
 }
 
-
-// Exibe um número na matriz de LEDs
+// Função para exibir um número na matriz de LEDs
 void display_number(uint8_t number) {
     // Matriz de números (0-9)
-    const int numbers_animation[11][5][5][3] = {
+    const uint8_t numbers_animation[10][5][5][3] = {
         // 0
         {
             {{255, 0, 0}, {255, 0, 0}, {255, 0, 0}, {255, 0, 0}, {255, 0, 0}},     
@@ -104,32 +103,8 @@ void display_number(uint8_t number) {
             {{0, 0, 0}, {0, 0, 0}, {230, 42, 0}, {0, 0, 0}, {0, 0, 0}},
             {{0, 0, 0}, {230, 42, 0}, {230, 42, 0}, {230, 42, 0}, {0, 0, 0}}       
         },
-        
-        {
-            {{204, 85, 0}, {204, 85, 0}, {204, 85, 0}, {204, 85, 0}, {204, 85, 0}},
-            {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {204, 85, 0}},
-            {{204, 85, 0}, {204, 85, 0}, {204, 85, 0}, {204, 85, 0}, {204, 85, 0}},
-            {{204, 85, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
-            {{204, 85, 0}, {204, 85, 0}, {204, 85, 0}, {204, 85, 0}, {204, 85, 0}}
-        },
-        
-        {
-            {{255, 128, 0}, {255, 128, 0}, {255, 128, 0}, {255, 128, 0}, {255, 128, 0}},
-            {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {255, 128, 0}},
-            {{0, 0, 0}, {255, 128, 0}, {255, 128, 0}, {255, 128, 0}, {255, 128, 0}},
-            {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {255, 128, 0}},
-            {{255, 128, 0}, {255, 128, 0}, {255, 128, 0}, {255, 128, 0}, {255, 128, 0}}
-        },
-        
-        {
-            {{255, 170, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {255, 170, 0}},
-            {{255, 170, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {255, 170, 0}},
-            {{255, 170, 0}, {255, 170, 0}, {255, 170, 0}, {255, 170, 0}, {255, 170, 0}},
-            {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {255, 170, 0}},
-            {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {255, 170, 0}}
-        },
 
-        // ... continuar com a definição dos outros números até o 9 ...
+        // Continue com o restante dos números...
     };
 
     // Desenho do número selecionado no display de LEDs
@@ -145,6 +120,20 @@ void display_number(uint8_t number) {
     send_to_leds();
 }
 
+// Função para configurar o display e escrever informações
+void display_info() {
+    ssd1306_clear(&ssd);  // Limpa o display
+    ssd1306_draw_string(&ssd, "Sistema de LEDs", 0, 0);  // Escreve o título
+    ssd1306_draw_string(&ssd, "Número: 5", 0, 10);  // Escreve o número atual
+    ssd1306_draw_string(&ssd, "Pressione os botões", 0, 20);  // Mensagem de instrução
+    ssd1306_display(&ssd);  // Atualiza o display
+}
+
+void ssd1306_init(ssd1306_t *ssd, uint8_t width, uint8_t height, bool external_vcc, uint8_t address, i2c_inst_t *i2c);
+
+void ssd1306_clear(ssd1306_t *ssd);  // Adicionada a declaração da função ssd1306_clear
+void ssd1306_display(ssd1306_t *ssd);  // Adicionada a declaração da função ssd1306_display
+
 int main() {
     // Inicializações
     stdio_init_all();
@@ -156,9 +145,14 @@ int main() {
     gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
     gpio_pull_up(I2C_SDA);
     gpio_pull_up(I2C_SCL);
-    ssd1306_init(&ssd, I2C_PORT, endereco);
+
+    // Inicializando o display SSD1306 com o pino de reset
+    ssd1306_init(&ssd, 128, 64, false, ENDERECO, I2C_PORT);  // Ajuste na chamada da função
     ssd1306_clear(&ssd);
 
+    // Exibe informações no display SSD1306
+    display_info();
+    
     // Exemplo de exibição do número 5 na matriz
     display_number(5);
     
